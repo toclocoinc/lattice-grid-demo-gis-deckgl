@@ -24,6 +24,7 @@
         <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.0/dist.min.js"></script>
         <script src="data.js"></script>
+        <script src="loading.js"></script>
         <style>
             body { margin: 0; font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
                    background: var(--lattice-background, #fff); color: var(--lattice-foreground, #14171a); }
@@ -40,11 +41,19 @@
             #readout { margin-top: 10px; font-variant-numeric: tabular-nums; }
             #footer-body { font-size: 11px; color: var(--lattice-foreground-muted, #5b6570); }
             #footer-body a { color: var(--lattice-accent, #1f6feb); }
+            /* Over the map and table windows (columns 1-15 of 24, rows 1-19 of 20) until the first rows are in. */
+            .loading { position: fixed; top: 6px; left: 6px; width: calc(62.5% - 9px); height: calc(95% - 9px); z-index: 4;
+                       display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem;
+                       box-sizing: border-box; background: rgba(255, 255, 255, .9); color: #14171a; font-size: 15px; }
+            [data-theme="dark"] .loading { background: rgba(20, 23, 26, .9); color: #e6e8ea; }
+            .loading[hidden] { display: none; }
+            .loading button, #status button { font: inherit; margin-left: .4rem; padding: .1rem .6rem; }
         </style>
     </head>
     <body>
         <div id="status" style="position: fixed; top: 4px; right: 10px; z-index: 5; font-size: 11px">Starting DuckDB-Wasm&hellip;</div>
         <div id="container" style="height: 100vh"></div>
+        <div class="loading" id="loading" role="status" aria-live="polite"><p id="loading-text">Starting DuckDB-WASM&hellip;</p></div>
         <template id="layers-panel">
             <label class="toggle"><input type="checkbox" data-layer="plants" checked> Plants</label>
             <div class="legend" id="fuel-legend"></div>

@@ -35,9 +35,11 @@ $('#size-legend').innerHTML = [10, 1000, 5000].map((mw) => '<i class="sw" style=
 $('#capacity-ramp').style.background = 'linear-gradient(90deg, rgb(' + CAP[0] + '), rgb(' + CAP[1] + '))';
 $('#density-ramp').style.background = 'linear-gradient(90deg, rgb(' + DEN[0] + '), rgb(' + DEN[1] + '))';
 
+const loader = createLoader({ timeoutMs: 90_000 });
 (async () => {
-    const { plants, countries } = await startDuckDB();
-    $('#status').textContent = '';
+    loader.armTimeout();
+    const { plants, countries } = await startDuckDB(loader.step);
+    loader.step('drawing the layers', 'Drawing layers…');
 
     // The attribute table: every plant, paged from DuckDB; sort and the filter row run in SQL.
     const grid = LatticeGrid.createGrid(panel('table', 'Attribute table · all plants, filter row on'), {
@@ -53,6 +55,7 @@ $('#density-ramp').style.background = 'linear-gradient(90deg, rgb(' + DEN[0] + '
         ],
     });
     $('#version').textContent = grid.getVersion();
+    loader.waitForRows(() => grid.rows.count() > 0 && grid.rows.get(0).data && grid.rows.get(0).data.name !== undefined);
 
     // Engine answers over the matching set (the viewport box included): KPIs and capacity per country.
     const request = (groupBy) => ({ filters: grid.filters.get(), sort: [], range: null, groupBy });
@@ -138,7 +141,4 @@ $('#density-ramp').style.background = 'linear-gradient(90deg, rgb(' + DEN[0] + '
     grid.on('filter:changed', refresh);
     refresh();
     window.__demo = { grid, deck: deckgl, binding, plants, basemap };
-})().catch((err) => {
-    console.error('[gis-deckgl]', err);
-    $('#status').textContent = 'The demo could not start here: ' + err.message;
-});
+})().catch(loader.fail);
