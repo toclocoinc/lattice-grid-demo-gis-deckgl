@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>deck.gl GIS Map with an Attribute Table | Lattice Grid</title>
+        <link rel="icon" href="data:,">
+        <script>
+            // `?theme=dark` puts the whole page, grid and tiles included, under data-theme="dark".
+            if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+        </script>
+        <script>
+            // Where the library comes from. `false` loads the published release from the CDN;
+            // `true` loads a local build from vendor/ instead (not part of this repository).
+            const LOCAL = false;
+            const LIB = LOCAL ? 'vendor/' : 'https://cdn.jsdelivr.net/npm/@toclocoinc/lattice-grid@1.74.0/';
+            document.write('<link rel="stylesheet" href="' + LIB + 'lattice-grid.min.css">');
+            for (const file of ['lattice-grid.min.js', 'modules/layout.min.js', 'modules/kpi.min.js',
+                'modules/geometry.min.js', 'modules/deckgl.min.js']) {
+                document.write('<script src="' + LIB + file + '"><' + '/script>');
+            }
+        </script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+        <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.0/dist.min.js"></script>
+        <script src="data.js"></script>
+        <style>
+            body { margin: 0; font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                   background: var(--lattice-background, #fff); color: var(--lattice-foreground, #14171a); }
+            .panel { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 4px 8px; }
+            .panel__head { font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+                           color: var(--lattice-foreground-muted, #5b6570); padding-bottom: 4px; }
+            .panel__body { flex: 1 1 auto; min-height: 0; position: relative; overflow: auto; }
+            #map-body .panel__body { overflow: hidden; }
+            #basemap, #deck { position: absolute; inset: 0; }
+            .toggle { display: block; margin: 8px 0 2px; font-weight: 600; }
+            .legend { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11px; margin-left: 22px; align-items: center; }
+            .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; }
+            .ramp { width: 140px; height: 10px; border-radius: 2px; }
+            #readout { margin-top: 10px; font-variant-numeric: tabular-nums; }
+            #footer-body { font-size: 11px; color: var(--lattice-foreground-muted, #5b6570); }
+            #footer-body a { color: var(--lattice-accent, #1f6feb); }
+        </style>
+    </head>
+    <body>
+        <div id="status" style="position: fixed; top: 4px; right: 10px; z-index: 5; font-size: 11px">Starting DuckDB-Wasm&hellip;</div>
+        <div id="container" style="height: 100vh"></div>
+        <template id="layers-panel">
+            <label class="toggle"><input type="checkbox" data-layer="plants" checked> Plants</label>
+            <div class="legend" id="fuel-legend"></div>
+            <div class="legend">size by MW: <span id="size-legend"></span></div>
+            <label class="toggle"><input type="checkbox" data-layer="countries" checked> Capacity by country</label>
+            <div class="legend">100 MW <span class="ramp" id="capacity-ramp"></span> 1,000,000 MW</div>
+            <label class="toggle"><input type="checkbox" data-layer="density" checked> Density (zoomed out)</label>
+            <div class="legend">fewer <span class="ramp" id="density-ramp"></span> more plants per cell</div>
+            <div id="readout" aria-live="polite"></div>
+        </template>
+        <template id="footer-panel">
+            Data: <a href="https://github.com/wri/global-power-plant-database" target="_blank" rel="noopener">World Resources Institute, Global Power Plant Database v1.3</a> (CC BY 4.0)
+            &middot; country outlines: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain)
+            &middot; basemap: <a href="https://demotiles.maplibre.org/" target="_blank" rel="noopener">MapLibre demo tiles</a> (third-party service)
+            &middot; drawing: <a href="https://deck.gl" target="_blank" rel="noopener">deck.gl</a> + <a href="https://maplibre.org" target="_blank" rel="noopener">MapLibre GL JS</a>
+            &middot; Lattice Grid <span id="version"></span>
+        </template>
+        <script>
+            // Bound to toclocoinc.github.io; does nothing anywhere else. localhost never needs a key.
+            LatticeGrid.setLicence('LG1.eyJ2IjoxLCJwIjoibGF0dGljZS1ncmlkIiwidCI6IlRPQ0xPQ08gSW5jIC0gcHVibGljIGRlbW9zIiwiZSI6IjIwMzAtMDEtMDEiLCJkIjpbInRvY2xvY29pbmMuZ2l0aHViLmlvIl19.9De42ua3aCGpiMB6EVRP7Tv-upUlDI-0T07rlSPzvCrsqg8t4YJi7SRnStEpAg48uzmcG7il1fR_TfwkUE7iCA');
+        </script>
+        <script src="app.js"></script>
+    </body>
+</html>
