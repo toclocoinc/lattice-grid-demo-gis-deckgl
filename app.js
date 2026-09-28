@@ -1,12 +1,6 @@
 // deck.gl + MapLibre as the map, Lattice Grid as the attribute table: one
 // DuckDB relation, five windows, the map's view as the grid's filter.
-const FUEL = { Coal: [90, 90, 90], Gas: [230, 140, 30], Oil: [140, 70, 30], Hydro: [30, 120, 220],
-    Nuclear: [170, 60, 200], Solar: [240, 200, 20], Wind: [40, 190, 170], Biomass: [90, 160, 60] };
-const OTHER = [150, 150, 170];
-const ramp = (t, a, b) => a.map((v, i) => Math.round(v + (b[i] - v) * Math.min(1, Math.max(0, t))));
-const CAP = [[255, 237, 160], [189, 0, 38]], DEN = [[198, 219, 239], [8, 48, 107]];
-const radius = (mw) => 1.5 + Math.sqrt(Math.max(0, mw)) / 6; // pixels, area-true
-const shown = { plants: true, countries: true, density: true };
+// The layers and their legends live in layers.js; the data side in data.js.
 const $ = (sel) => document.querySelector(sel);
 const panel = (id, heading, html) => {
     const el = $('#' + id + '-body');
@@ -28,12 +22,7 @@ LatticeGridLayout.createLayout($('#container'), {
 panel('map', 'Map · drag or scroll to move; the view filters the table', '<div id="basemap"></div><div id="deck"></div>');
 panel('layers', 'Layers', $('#layers-panel').innerHTML);
 $('#footer-body').innerHTML = $('#footer-panel').innerHTML;
-$('#fuel-legend').innerHTML = Object.entries(FUEL).concat([['Other', OTHER]]).map(([f, c]) =>
-    '<span><i class="sw" style="background:rgb(' + c + ')"></i>' + f + '</span>').join('');
-$('#size-legend').innerHTML = [10, 1000, 5000].map((mw) => '<i class="sw" style="width:' + 2 * radius(mw)
-    + 'px;height:' + 2 * radius(mw) + 'px;background:#888"></i>' + mw.toLocaleString() + ' ').join('');
-$('#capacity-ramp').style.background = 'linear-gradient(90deg, rgb(' + CAP[0] + '), rgb(' + CAP[1] + '))';
-$('#density-ramp').style.background = 'linear-gradient(90deg, rgb(' + DEN[0] + '), rgb(' + DEN[1] + '))';
+drawLegends($);
 
 const loader = createLoader({ timeoutMs: 90_000 });
 (async () => {
@@ -42,15 +31,16 @@ const loader = createLoader({ timeoutMs: 90_000 });
     loader.step('drawing the layers', 'Drawing layers…');
 
     // The attribute table: every plant, paged from DuckDB; sort and the filter row run in SQL.
+    // Flex shares divide the window's width, so the table fills it on any screen.
     const grid = LatticeGrid.createGrid(panel('table', 'Attribute table · all plants, filter row on'), {
         rowKey: 'id', source: plants, filterRow: true, selection: 'single',
         columns: [
             { field: 'id', title: 'ID', layout: { hidden: true } },
-            { field: 'name', title: 'Plant', layout: { width: 260 } },
-            { field: 'country', title: 'Country', layout: { width: 90 } },
-            { field: 'primary_fuel', title: 'Fuel', layout: { width: 110 } },
-            { field: 'capacity_mw', title: 'MW', type: 'number', format: { decimals: 1 }, layout: { width: 100 } },
-            { field: 'commissioning_year', title: 'Year', type: 'number', layout: { width: 80 } },
+            { field: 'name', title: 'Plant', layout: { flex: 4, min: 200 } },
+            { field: 'country', title: 'Country', layout: { flex: 1, min: 80 } },
+            { field: 'primary_fuel', title: 'Fuel', layout: { flex: 1.5, min: 100 } },
+            { field: 'capacity_mw', title: 'MW', type: 'number', format: { decimals: 1 }, layout: { flex: 1, min: 90 } },
+            { field: 'commissioning_year', title: 'Year', type: 'number', layout: { flex: 1, min: 70 } },
             { field: 'geometry', title: 'Location', type: 'geometry', layout: { hidden: true } },
         ],
     });
@@ -60,15 +50,17 @@ const loader = createLoader({ timeoutMs: 90_000 });
     // Engine answers over the matching set (the viewport box included): KPIs and capacity per country.
     const request = (groupBy) => ({ filters: grid.filters.get(), sort: [], range: null, groupBy });
     let kpi = { n: null, mw: null };
-    const byCountry = new Map();
+    const state = { zoom: 1.2, override: {}, byCountry: new Map(), breaks: [], countries, selected: new Set() };
     const refresh = async () => {
         const [totals, groups] = await Promise.all([
             plants.aggregate(request([]), [{ id: 'n', col: 'id', fn: 'count' }, { id: 'mw', col: 'capacity_mw', fn: 'sum' }]),
             plants.aggregate(request(['country']), [{ id: 'mw', col: 'capacity_mw', fn: 'sum' }]),
         ]);
         kpi = totals.values;
-        byCountry.clear();
-        for (const g of groups.groups || []) byCountry.set(g.keys[0], Number(g.values.mw) || 0);
+        state.byCountry.clear();
+        for (const g of groups.groups || []) if (g.level > 0) state.byCountry.set(g.keys[0], Number(g.values.mw) || 0);
+        state.breaks = quantileBreaks([...state.byCountry.values()], 6);
+        drawCapacityLegend($('#capacity-legend'), state.breaks);
         tiles.refresh();
         binding.update();
     };
@@ -80,13 +72,24 @@ const loader = createLoader({ timeoutMs: 90_000 });
         ],
     });
 
-    // The map: MapLibre draws the tiles, deck.gl draws the layers and owns the view.
-    const view = { longitude: 10, latitude: 25, zoom: 1.2 };
-    const basemap = new maplibregl.Map({ container: 'basemap', style: 'https://demotiles.maplibre.org/style.json',
+    // The map: MapLibre draws a neutral keyless basemap (OpenFreeMap Positron, Bright
+    // if Positron fails to load), deck.gl draws the layers and owns the view.
+    const view = { longitude: 10, latitude: 25, zoom: state.zoom };
+    const STYLES = ['https://tiles.openfreemap.org/styles/positron', 'https://tiles.openfreemap.org/styles/bright'];
+    const basemap = new maplibregl.Map({ container: 'basemap', style: STYLES[0],
         interactive: false, center: [view.longitude, view.latitude], zoom: view.zoom, attributionControl: false });
+    let styled = false, fellBack = false;
+    basemap.once('style.load', () => { styled = true; });
+    basemap.on('error', () => { if (!styled && !fellBack) { fellBack = true; basemap.setStyle(STYLES[1]); } });
     const deckgl = new deck.Deck({
         parent: $('#deck'), initialViewState: view, controller: true,
         getCursor: ({ isHovering }) => (isHovering ? 'pointer' : 'grab'),
+        // Crossing the world-zoom line swaps layers even before the rows answer.
+        onViewStateChange: ({ viewState }) => {
+            const crossed = (viewState.zoom < WORLD_ZOOM) !== (state.zoom < WORLD_ZOOM);
+            state.zoom = viewState.zoom;
+            if (crossed) queueMicrotask(() => binding.update());
+        },
         onAfterRender: () => {
             const vp = deckgl.getViewports()[0];
             if (vp) basemap.jumpTo({ center: [vp.longitude, vp.latitude], zoom: vp.zoom });
@@ -99,46 +102,30 @@ const loader = createLoader({ timeoutMs: 90_000 });
         },
     });
 
+    const boxes = [...document.querySelectorAll('[data-layer]')];
+    // viewportCap 5,000 (default 20,000): a continent at zoom 4-5 holds 8-9k plants, so it draws as density.
     const binding = LatticeGridDeck.bindDeck(grid, {
-        deck: deckgl, viewportFilter: true, position: { geometry: 'geometry' },
+        deck: deckgl, viewportFilter: true, position: { geometry: 'geometry' }, viewportCap: 5000,
         layers: (rows, ctx) => {
             const p = ctx.provenance;
             $('#readout').textContent = 'rows drawn ' + p.rows.toLocaleString() + ' of ' + p.matched.toLocaleString()
                 + ' matched · ' + (p.computed === 'engine' ? 'engine' : 'browser')
                 + (p.binned ? ' · binned into ' + p.cells.toLocaleString() + ' cells' : '') + (ctx.pending ? ' · loading' : '');
-            const selected = new Set(grid.selection.keys());
-            const maxCount = ctx.binned ? Math.max(1, ...rows.map((c) => c.count)) : 1;
-            return [
-                shown.countries && new deck.GeoJsonLayer({
-                    id: 'countries', data: countries, stroked: true, lineWidthMinPixels: 0.5, getLineColor: [120, 120, 120, 120],
-                    getFillColor: (f) => [...ramp((Math.log10(byCountry.get(f.properties.iso) || 1) - 2) / 4, ...CAP), 110],
-                    updateTriggers: { getFillColor: [...byCountry.values()].join() },
-                }),
-                shown.density && ctx.binned && new deck.PolygonLayer({
-                    id: 'density', data: rows, stroked: false,
-                    getPolygon: (c) => [[c.west, c.south], [c.east, c.south], [c.east, c.north], [c.west, c.north]],
-                    getFillColor: (c) => [...ramp(Math.sqrt(c.count / maxCount), ...DEN), 190],
-                }),
-                shown.plants && !ctx.binned && new deck.ScatterplotLayer({
-                    id: 'plants', data: ctx.features, pickable: true, radiusUnits: 'pixels', opacity: 0.8,
-                    getPosition: (f) => f.geometry.coordinates, getRadius: (f) => radius(f.properties.capacity_mw),
-                    getFillColor: (f) => FUEL[f.properties.primary_fuel] || OTHER,
-                }),
-                // Table → map: the selected row drawn as a ring on top.
-                new deck.ScatterplotLayer({
-                    id: 'highlight', data: ctx.features.filter((f) => selected.has(f.properties.id)),
-                    radiusUnits: 'pixels', stroked: true, filled: false, lineWidthMinPixels: 3, getLineColor: [255, 0, 90],
-                    getPosition: (f) => f.geometry.coordinates, getRadius: (f) => radius(f.properties.capacity_mw) + 6,
-                }),
-            ].filter(Boolean);
+            state.selected = new Set(grid.selection.keys());
+            try { state.zoom = deckgl.getViewports()[0]?.zoom ?? state.zoom; } catch { /* deck not initialised yet */ }
+            const { layers, on } = buildLayers(rows, ctx, state);
+            for (const box of boxes) box.checked = on[box.dataset.layer];
+            return layers;
         },
     });
 
-    for (const box of document.querySelectorAll('[data-layer]')) {
-        box.addEventListener('change', () => { shown[box.dataset.layer] = box.checked; binding.update(); });
+    // A toggle the reader touches overrides the zoom rule for that layer; "auto" hands it back.
+    for (const box of boxes) {
+        box.addEventListener('change', () => { state.override[box.dataset.layer] = box.checked; binding.update(); });
     }
+    $('#auto-layers').addEventListener('click', () => { state.override = {}; binding.update(); });
     grid.on('selection:changed', () => binding.update());
     grid.on('filter:changed', refresh);
     refresh();
-    window.__demo = { grid, deck: deckgl, binding, plants, basemap };
+    window.__demo = { grid, deck: deckgl, binding, plants, basemap, state, kpi: () => kpi };
 })().catch(loader.fail);

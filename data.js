@@ -5,7 +5,7 @@
  *
  * Why a paged pushdown source and not the 35k rows in memory: the deck.gl
  * binding asks the ENGINE for the rows inside the view, and past its cap
- * (20,000) hands over the engine's density cells instead. A memory grid would
+ * (5,000 here, set in app.js) hands over the engine's density cells instead. A memory grid would
  * hand deck every row at every zoom, with no density path at all.
  */
 

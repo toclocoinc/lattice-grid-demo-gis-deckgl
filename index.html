@@ -25,6 +25,7 @@
         <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.1.0/dist.min.js"></script>
         <script src="data.js"></script>
         <script src="loading.js"></script>
+        <script src="layers.js"></script>
         <style>
             body { margin: 0; font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
                    background: var(--lattice-background, #fff); color: var(--lattice-foreground, #14171a); }
@@ -37,7 +38,10 @@
             .toggle { display: block; margin: 8px 0 2px; font-weight: 600; }
             .legend { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11px; margin-left: 22px; align-items: center; }
             .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: -1px; }
-            .ramp { width: 140px; height: 10px; border-radius: 2px; }
+            .sw.sq { border-radius: 2px; }
+            .ramp { display: inline-flex; width: 140px; height: 10px; }
+            .ramp i { flex: 1; }
+            .auto { font: inherit; font-size: 11px; margin-top: 8px; padding: 1px 8px; }
             #readout { margin-top: 10px; font-variant-numeric: tabular-nums; }
             #footer-body { font-size: 11px; color: var(--lattice-foreground-muted, #5b6570); }
             #footer-body a { color: var(--lattice-accent, #1f6feb); }
@@ -55,19 +59,20 @@
         <div id="container" style="height: 100vh"></div>
         <div class="loading" id="loading" role="status" aria-live="polite"><p id="loading-text">Starting DuckDB-WASM&hellip;</p></div>
         <template id="layers-panel">
-            <label class="toggle"><input type="checkbox" data-layer="plants" checked> Plants</label>
+            <label class="toggle"><input type="checkbox" data-layer="plants" checked> Plants (fewer than the cap in view)</label>
             <div class="legend" id="fuel-legend"></div>
             <div class="legend">size by MW: <span id="size-legend"></span></div>
-            <label class="toggle"><input type="checkbox" data-layer="countries" checked> Capacity by country</label>
-            <div class="legend">100 MW <span class="ramp" id="capacity-ramp"></span> 1,000,000 MW</div>
-            <label class="toggle"><input type="checkbox" data-layer="density" checked> Density (zoomed out)</label>
-            <div class="legend">fewer <span class="ramp" id="density-ramp"></span> more plants per cell</div>
+            <label class="toggle"><input type="checkbox" data-layer="countries" checked> Capacity by country (world view)</label>
+            <div class="legend" id="capacity-legend"></div>
+            <label class="toggle"><input type="checkbox" data-layer="density" checked> Density (more plants in view than the cap)</label>
+            <div class="legend">fewer <span class="ramp" id="density-ramp"></span> more plants per hexagon (quantiles)</div>
+            <button type="button" class="auto" id="auto-layers">Layers by zoom</button>
             <div id="readout" aria-live="polite"></div>
         </template>
         <template id="footer-panel">
             Data: <a href="https://github.com/wri/global-power-plant-database" target="_blank" rel="noopener">World Resources Institute, Global Power Plant Database v1.3</a> (CC BY 4.0)
             &middot; country outlines: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain)
-            &middot; basemap: <a href="https://demotiles.maplibre.org/" target="_blank" rel="noopener">MapLibre demo tiles</a> (third-party service)
+            &middot; basemap: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> Positron, <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">&copy; OpenMapTiles</a>, data <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">&copy; OpenStreetMap contributors</a>
             &middot; drawing: <a href="https://deck.gl" target="_blank" rel="noopener">deck.gl</a> + <a href="https://maplibre.org" target="_blank" rel="noopener">MapLibre GL JS</a>
             &middot; Lattice Grid <span id="version"></span>
         </template>

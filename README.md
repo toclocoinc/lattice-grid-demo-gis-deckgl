@@ -8,20 +8,26 @@ and the country fills narrow to what is on screen.
 
 ## What it shows
 
-- **Map** — deck.gl layers over a MapLibre basemap, bound to the grid with
-  `bindDeck` from `modules/deckgl`:
-  - **Plants**: a `ScatterplotLayer`, one dot per plant, sized by MW
-    (area-true) and coloured by fuel. Click a plant to select its row in the
-    table; the table scrolls to it.
-  - **Capacity by country**: a `GeoJsonLayer` choropleth of the Natural Earth
-    outlines, filled by the total MW of the matching plants in each country,
-    summed by DuckDB through `source.aggregate()` grouped by country.
-  - **Density**: zoomed out, the view holds more plants than the binding's
-    cap (20,000), so the engine hands over square density cells instead of
-    rows and they are drawn as a `PolygonLayer`.
+- **Map** — deck.gl layers over a neutral MapLibre basemap, bound to the grid
+  with `bindDeck` from `modules/deckgl`. Which layer draws follows the zoom:
+  - **Capacity by country** (world view, zoom below 4): a `GeoJsonLayer`
+    choropleth of the Natural Earth outlines, filled by the total MW of the
+    matching plants in each country in six quantile classes, summed by DuckDB
+    through `source.aggregate()` grouped by country. The legend shows each
+    class's MW range and follows the view.
+  - **Density** (zoom 4 and closer, while the view holds more plants than the
+    binding's `viewportCap`, set to 5,000 here): the engine hands over density
+    cells instead of rows, and the page draws them as a deck.gl `HexagonLayer`
+    weighted by each cell's count, coloured by quantile.
+  - **Plants** (fewer plants in view than the cap): a `ScatterplotLayer`, one
+    dot per plant, sized by MW (area-true) and coloured by fuel. Click a plant
+    to select its row in the table; the table scrolls to it.
   - A ring marks the row selected in the table.
+  - Ticking or unticking a layer overrides the zoom rule for that layer;
+    **Layers by zoom** hands control back.
 - **Attribute table** — the whole dataset, paged from DuckDB, with the filter
-  row on. Sorting and filtering run as SQL.
+  row on. Sorting and filtering run as SQL. The columns take `flex` shares,
+  so the table fills its window at any screen width.
 - **Layers** — a toggle and a legend per layer, and the binding's own
   readout: rows drawn, rows matched, and whether the engine or the browser
   counted them.
@@ -40,9 +46,11 @@ Add `?theme=dark` to the address to see the page under `data-theme="dark"`.
 - `data/countries.parquet` (157 KB) — country outlines from
   [Natural Earth](https://www.naturalearthdata.com/) (1:110m), public domain.
 
-**Basemap tiles come from a third-party service**: the keyless MapLibre demo
-style, `https://demotiles.maplibre.org/style.json`, operated by the MapLibre
-project. The page also loads MapLibre GL JS 4.7.1, deck.gl 9.1.0 and
+**Basemap tiles come from a third-party service**: the keyless
+[OpenFreeMap](https://openfreemap.org) Positron style,
+`https://tiles.openfreemap.org/styles/positron` (OpenFreeMap's Bright style if
+Positron fails to load). Map data © OpenStreetMap contributors, tiles
+© OpenMapTiles. The page also loads MapLibre GL JS 4.7.1, deck.gl 9.1.0 and
 DuckDB-WASM 1.32.0 from jsDelivr.
 
 ## Run it locally
