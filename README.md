@@ -55,7 +55,7 @@ DuckDB-WASM 1.32.0 from jsDelivr.
 
 ## Run it locally
 
-The page loads Lattice Grid 1.74.0 from the jsDelivr CDN. To try a local build
+The page loads Lattice Grid 1.79.0 from the jsDelivr CDN. To try a local build
 instead, copy the grid's `dist/` to `vendor/` (not part of this repository)
 and set `LOCAL = true` at the top of `index.html`. Serve the folder with any
 static server, for example:
